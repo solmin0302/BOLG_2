@@ -1,89 +1,120 @@
-let postId = 1;
+import Post from '../../models/post';
+import mongoose from 'mongoose';
+import Joi from 'joi';
 
-const posts = [
-  {
-    id: 1,
-    title: 'title',
-    body: 'body',
-  },
-];
+const { ObjectId } = mongoose.Types;
+
+export const checkObjectId = (ctx, next) => {
+  const { id } = ctx.params;
+  if (!ObjectId.isValid(id)) {
+    ctx.status = 400;
+    return;
+  }
+  return next();
+};
 
 /**포스트 작성 */
-export const write = (ctx) => {
-  const { title, body } = ctx.request.body;
-  postId += 1;
-  const post = { id: postId, title, body };
-  posts.push(post);
-  ctx.body = post;
-};
+export const write = async (ctx) => {
+  const schema = Joi.object().keys({
+    title: Joi.string().required(),
+    body: Joi.string().required(),
+    tags: Joi.array().items(Joi.string()).required(),
+  });
 
-export const list = (ctx) => {
-  ctx.body = posts;
-};
-
-export const read = (ctx) => {
-  const { id } = ctx.params;
-
-  const post = posts.find((p) => p.id.toString() === id);
-  if (!post) {
-    ctx.status = 404;
-    ctx.body = {
-      message: 'no post',
-    };
+  const result = schema.validate(ctx.request.body);
+  if (result.error) {
+    ctx.status = 400;
+    ctx.body = result.error;
     return;
   }
-  ctx.body = post;
+  const { title, body, tags } = ctx.request.body;
+  const post = new Post({
+    title,
+    body,
+    tags,
+  });
+  try {
+    await post.save();
+    ctx.body = post;
+  } catch (e) {
+    ctx.throw(500, e);
+  }
 };
 
-export const remove = (ctx) => {
-  const { id } = ctx.params;
-  const index = posts.findIndex((p) => p.id.toString() === id);
-
-  if (index === -1) {
-    ctx.status = 404;
-    ctx.body = {
-      message: 'nopost',
-    };
+export const list = async (ctx) => {
+  const page = parseInt(ctx.query.page || '1', 10);
+  if (page < 1) {
+    ctx.status = 400;
     return;
   }
-  posts.splice(index, 1);
+  try {
+    const posts = await Post.find()
+      .sort({ _id: -1 })
+      .limit(10)
+      .skip((page - 1) * 10)
+      .lean()
+      .exec();
+    const postCount = await Post.countDocuments().exec();
+    ctx.set('Last-Page', Math.ceil(postCount / 10));
+    ctx.body = posts.map((post) => ({
+      ...post,
+      body:
+        post.body.length < 200 ? post.body : `${post.body.slice(0, 200)}...`,
+    }));
+    ctx.body = posts;
+  } catch (e) {
+    ctx.throw(500, e);
+  }
 };
 
-export const replace = (ctx) => {
+export const read = async (ctx) => {
   const { id } = ctx.params;
-  const index = posts.findIndex((p) => p.id === id);
-
-  if (index === -1) {
-    ctx.status = 404;
-    ctx.body = {
-      message: 'nopost',
-    };
-    return;
+  try {
+    const post = await Post.findById(id).exec();
+    if (!post) {
+      ctx.status = 404;
+      return;
+    }
+    ctx.body = post;
+  } catch (e) {
+    throw (500, e);
   }
-  // 전체 객체를 덮어 씌웁니다.
-  // 따라서 id를 제외한 기존 정보를 날리고, 객체를 새로 만듭니다.
-  posts[index] = {
-    id,
-    ...ctx.request.body,
-  };
-  ctx.body = posts[index];
 };
 
-export const update = (ctx) => {
+export const remove = async (ctx) => {
   const { id } = ctx.params;
-  const index = posts.findIndex((p) => p.id === id);
+  try {
+    await Post.findByIdAndRemove(id).exec();
+    ctx.status = 204;
+  } catch (e) {
+    ctx.throw(500, e);
+  }
+};
 
-  if (index === -1) {
-    ctx.status = 404;
-    ctx.body = {
-      message: 'nopost',
-    };
+export const update = async (ctx) => {
+  const schema = Joi.object().keys({
+    title: Joi.string(),
+    body: Joi.string(),
+    tags: Joi.array().items(Joi.string()),
+  });
+
+  const result = schema.validate(ctx.request.body);
+  if (result.error) {
+    ctx.status = 400;
+    ctx.body = result.error;
     return;
   }
-  // replace와는 다르게 기존값에 정보를 덮어 씌운다.
-  posts[index] = {
-    ...posts[index],
-    ...ctx.request.body,
-  };
-  ctx.body = posts[index];
+  const { id } = ctx.params;
+  try {
+    const post = await Post.findByIdAndUpdate(id, ctx.request.body, {
+      new: true,
+    }).exec();
+    if (!post) {
+      ctx.status = 404;
+      return;
+    }
+    ctx.body = post;
+  } catch (e) {
+    throw (500, e);
+  }
 };

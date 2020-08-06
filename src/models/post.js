@@ -18,6 +18,10 @@ const PostSchema = new Schema({
     default: Date.now,
     comments: [CommentSchema],
   },
+  user: {
+    _id: mongoose.Types.ObjectId,
+    username: String,
+  },
 });
 
 const Post = mongoose.model('Post', PostSchema);

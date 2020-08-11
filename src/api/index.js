@@ -7,5 +7,6 @@ const api = new Router();
 // 라우터 설정
 api.use('/posts', posts.routes());
 api.use('/auth', auth.routes());
+api.use('/comment');
 
 export default api;

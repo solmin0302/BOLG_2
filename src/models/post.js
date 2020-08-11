@@ -2,13 +2,6 @@ import mongoose from 'mongoose';
 
 const { Schema } = mongoose;
 
-const CommentSchema = new Schema({
-  body: String,
-  publishedDate: {
-    type: Date,
-    default: Date.now,
-  },
-});
 const PostSchema = new Schema({
   title: String,
   body: String,
@@ -16,8 +9,13 @@ const PostSchema = new Schema({
   publishedDate: {
     type: Date,
     default: Date.now,
-    comments: [CommentSchema],
   },
+  commnets: [
+    {
+      type: Schema.Types.ObjectId,
+      ref: 'Comment',
+    },
+  ],
   user: {
     _id: mongoose.Types.ObjectId,
     username: String,
